@@ -44,7 +44,9 @@ def num_features_helper(feature_subset_val, max_features_return=-1):
 
 
 def parse_model_name(name: str) -> str:
-    name = name[name.find("--")+2:]
+    idx = name.find("--")
+    if idx != -1:
+        name = name[idx+2:]
     return name
 
 
@@ -58,6 +60,42 @@ def get_non_instruction_tuned_name(name):
     return name
 
 
+def parse_results_dict(dct) -> dict:
+    """Parses results dict and brings all information to the top-level."""
+    model_col = "config_model_name"
+    feature_subset_col = "config_feature_subset"
+
+    # Make a copy so we don't modify the input object
+    dct = dct.copy()
+
+    # Discard plots' paths
+    dct.pop("plots", None)
+
+    # Bring configs to top-level
+    config = dct.pop("config", {})
+    for key, val in config.items():
+        dct[f"config_{key}"] = val
+
+    # Parse model name
+    dct[model_col] = parse_model_name(dct[model_col])
+    dct["base_name"] = get_non_instruction_tuned_name(dct[model_col])
+    dct["name"] = prettify_model_name(dct[model_col])
+
+    # Is instruction-tuned model?
+    dct["is_inst"] = dct["base_name"] != dct[model_col] or "(it)" in dct["name"].lower()
+
+    # Log number of features
+    dct["num_features"] = num_features_helper(dct[feature_subset_col], max_features_return=-1)
+    dct["uses_all_features"] = (dct[feature_subset_col] is None) or (dct["num_features"] == -1)
+
+    if dct[feature_subset_col] is None:
+        dct[feature_subset_col] = "full"
+
+    # Assert all results are at the top-level
+    assert not any(isinstance(val, dict) for val in dct.values())
+    return dct
+
+
 def prettify_model_name(name: str) -> str:
     """Get prettified version of the given model name."""
     dct = {
@@ -65,8 +103,13 @@ def prettify_model_name(name: str) -> str:
         "Meta-Llama-3-70B-Instruct": "Llama 3 70B (it)",
         "Meta-Llama-3-8B": "Llama 3 8B",
         "Meta-Llama-3-8B-Instruct": "Llama 3 8B (it)",
+        "Llama-3-8B": "Llama 3 8B",
+        "Llama-3-8B-Instruct": "Llama 3 8B (it)",
+        "Llama-3.1-8B": "Llama 3.1 8B",
+        "Llama-3.1-8B-Instruct": "Llama 3.1 8B (it)",
         "Mistral-7B-Instruct-v0.2": "Mistral 7B (it)",
         "Mistral-7B-v0.1": "Mistral 7B",
+        "Mistral-7B-Instruct-v0.1": "Mistral 7B (it)",
         "Mixtral-8x22B-Instruct-v0.1": "Mixtral 8x22B (it)",
         "Mixtral-8x22B-v0.1": "Mixtral 8x22B",
         "Mixtral-8x7B-Instruct-v0.1": "Mixtral 8x7B (it)",
@@ -82,9 +125,7 @@ def prettify_model_name(name: str) -> str:
         "gemma-2-27b": "Gemma 2 27B",
         "gemma-2-27b-it": "Gemma 2 27B (it)",
         "openai/gpt-4o-mini": "GPT 4o mini (it)",
-        "penai/gpt-4o-mini": "GPT 4o mini (it)",
         "openai/gpt-4o": "GPT 4o (it)",
-        "penai/gpt-4o": "GPT 4o (it)",
     }
 
     if name in dct:
